@@ -1,0 +1,28 @@
+# Ignore build directories
+/build/
+/build-dir/
+/buildDir/
+/.flatpak-builder/
+/sassc/
+
+# Ignore CLion specific files
+.idea/
+cmake-build-debug/
+cmake-build-release/
+*.iml
+
+# Ignore compiled files
+*.o
+*.so
+*.a
+*.out
+*.class
+
+# Ignore logs and temporary files
+*.log
+*.tmp
+*.swp
+
+# Ignore system files
+.DS_Store
+Thumbs.db
