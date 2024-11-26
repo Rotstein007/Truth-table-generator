@@ -10,9 +10,9 @@
 #include <stack>
 #include <map>
 
-class TruthTableApp : public Gtk::ApplicationWindow {
+class MainWindow : public Gtk::ApplicationWindow {
 public:
-    TruthTableApp() {
+    MainWindow() {
         set_title("Wahrheitstabelle Generator");
 
         // Layout
@@ -22,23 +22,24 @@ public:
 
         // Header Bar mit Info-Button
         set_titlebar(header_bar);
-        header_bar.set_title("Wahrheitstabelle Generator");
-        header_bar.set_show_close_button(true);
+        auto title_label = Gtk::make_managed<Gtk::Label>("Wahrheitstabelle Generator");
+        header_bar.set_title_widget(*title_label);
+        header_bar.set_show_title_buttons(true);
 
         // Info-Button
         info_button.set_icon_name("dialog-information-symbolic");
-        info_button.signal_clicked().connect(sigc::mem_fun(*this, &TruthTableApp::on_info_button_clicked));
+        info_button.signal_clicked().connect(sigc::mem_fun(*this, &MainWindow::on_info_button_clicked));
         header_bar.pack_end(info_button);
 
         // Eingabefelder und Button
         hbox.set_spacing(10);
         hbox.append(entry);
-        entry.set_placeholder_text("Wörter eingeben (getrennt durch Komma)");
+        entry.set_placeholder_text("Variablen eingeben (getrennt durch Komma)");
 
         hbox.append(generate_button);
         generate_button.set_label("Generiere Tabelle");
         generate_button.get_style_context()->add_class("suggested-action"); // Grüner Button
-        generate_button.signal_clicked().connect(sigc::mem_fun(*this, &TruthTableApp::on_generate_button_clicked));
+        generate_button.signal_clicked().connect(sigc::mem_fun(*this, &MainWindow::on_generate_button_clicked));
 
         vbox.append(hbox);
 
@@ -51,7 +52,7 @@ public:
 
         // Umschalt-Button für die Reihenfolge
         toggle_order_button.set_label("Reihenfolge umschalten");
-        toggle_order_button.signal_clicked().connect(sigc::mem_fun(*this, &TruthTableApp::on_toggle_order_button_clicked));
+        toggle_order_button.signal_clicked().connect(sigc::mem_fun(*this, &MainWindow::on_toggle_order_button_clicked));
         vbox.append(toggle_order_button);
 
         // TreeView für die Tabelle
@@ -81,27 +82,19 @@ private:
         auto variables = split(input_text, ',');
 
         if (variables.empty()) {
-            // Fehlerdialog anzeigen
-            auto dialog = Gtk::MessageDialog(*this, "Bitte geben Sie Wörter ein!", false, Gtk::MessageType::ERROR);
-            dialog.set_modal(true);
-            dialog.show();
+            show_error("Bitte geben Sie Variablen ein!");
             return;
         }
 
-        // Formel aus dem Textfeld
         auto formula_text = formula_entry.get_text();
 
-        // Generierung der Wahrheitstabelle
         try {
             generate_truth_table(variables, formula_text);
         } catch (const std::exception& e) {
-            auto dialog = Gtk::MessageDialog(*this, e.what(), false, Gtk::MessageType::ERROR);
-            dialog.set_modal(true);
-            dialog.show();
+            show_error(e.what());
         }
     }
 
-    // Event-Handler für den Umschalt-Button
     void on_toggle_order_button_clicked() {
         mirrored_order = !mirrored_order;
         auto input_text = entry.get_text();
@@ -112,35 +105,29 @@ private:
         }
     }
 
-    // Event-Handler für den Info-Button
     void on_info_button_clicked() {
-        auto dialog = Gtk::MessageDialog(
-            *this,
-            "Wahrheitstabelle Generator\n\n"
-            "Erstellt Wahrheitstabellen basierend auf Variablen und logischen Formeln.\n"
-            "Unterstützte Operatoren: & (UND), | (ODER), ! (NICHT)\n\n"
-            "Version: 1.0\n"
-            "Autor: Entwicklerteam",
-            false,
-            Gtk::MessageType::INFO
-        );
-        dialog.set_modal(true);
-        dialog.show();
+        Gtk::AboutDialog about_dialog;
+        about_dialog.set_program_name("Wahrheitstabelle Generator");
+        about_dialog.set_version("1.0");
+        about_dialog.set_comments("Erstellt Wahrheitstabellen basierend auf Variablen und logischen Formeln.");
+        about_dialog.set_license("GPL 3.0");
+        about_dialog.set_authors({"Entwicklerteam"});
+        about_dialog.set_logo_icon_name("dialog-information-symbolic");
+
+        // Open the dialog without using 'run()'
+        about_dialog.present();
     }
 
-    // Generierung der Wahrheitstabelle
     void generate_truth_table(const std::vector<std::string>& variables, const std::string& formula) {
         size_t rows = std::pow(2, variables.size());
 
-        // Spaltenmodell erstellen
         Gtk::TreeModelColumnRecord columns;
         std::vector<Gtk::TreeModelColumn<std::string>> col_vars;
-        for (const auto& var : variables) {
+        for (size_t i = 0; i < variables.size(); ++i) {
             col_vars.emplace_back();
             columns.add(col_vars.back());
         }
 
-        // Zusätzliche Spalte für die Formel
         Gtk::TreeModelColumn<std::string> col_formula;
         bool has_formula = !formula.empty();
         if (has_formula) {
@@ -150,20 +137,17 @@ private:
         list_store = Gtk::ListStore::create(columns);
         tree_view.set_model(list_store);
 
-        // Tabelle füllen
         for (size_t i = 0; i < rows; ++i) {
-            size_t row_index = mirrored_order ? rows - i - 1 : i; // Reihenfolge umkehren, falls gespiegelt
+            size_t row_index = mirrored_order ? rows - i - 1 : i;
             auto row = *(list_store->append());
-            std::bitset<32> binary(row_index); // Bis zu 32 Variablen
+            std::bitset<32> binary(row_index);
             size_t var_index = 0;
 
-            // Variablen-Spalten füllen
             for (const auto& var : variables) {
                 row[col_vars[var_index]] = binary[variables.size() - var_index - 1] ? "W" : "F";
                 ++var_index;
             }
 
-            // Formel-Spalte berechnen, falls vorhanden
             if (has_formula) {
                 try {
                     row[col_formula] = evaluate_formula(formula, variables, binary) ? "W" : "F";
@@ -173,7 +157,6 @@ private:
             }
         }
 
-        // Spalten in TreeView hinzufügen
         tree_view.remove_all_columns();
         size_t var_index = 0;
         for (const auto& var : variables) {
@@ -181,84 +164,129 @@ private:
             ++var_index;
         }
         if (has_formula) {
-            tree_view.append_column(formula, col_formula);
+            tree_view.append_column("Formel", col_formula);
         }
 
-        // Fenstergröße anpassen
-        int row_height = 30; // Höhe einer Zeile
-        int header_height = 40; // Höhe der Kopfzeile
-        int table_height = std::min<int>(rows * row_height + header_height, 600); // Maximale Höhe von 600px
+        int row_height = 30;
+        int header_height = 40;
+        int table_height = std::min<int>(rows * row_height + header_height, 600);
 
-        // ScrolledWindow-Größe anpassen
         scrolled_window.set_min_content_height(table_height);
-        scrolled_window.set_min_content_width(variables.size() * 100 + (has_formula ? 150 : 0)); // Spaltenbreite
+        scrolled_window.set_min_content_width(variables.size() * 100 + (has_formula ? 150 : 0));
 
-        // Größenrichtlinien des Fensters festlegen
         set_default_size(scrolled_window.get_min_content_width(), table_height + 60);
         set_size_request(scrolled_window.get_min_content_width(), table_height + 60);
     }
 
-    // Logische Formel auswerten
     bool evaluate_formula(const std::string& formula, const std::vector<std::string>& variables, const std::bitset<32>& binary) {
+        // Variablen ersetzen
         std::map<std::string, bool> values;
         for (size_t i = 0; i < variables.size(); ++i) {
             values[variables[i]] = binary[variables.size() - i - 1];
         }
 
-        // Ersetzen der Variablen durch ihre Werte
+        // Ersetzen der Variablen in der Formel
         std::string eval_formula = formula;
         for (const auto& [var, value] : values) {
             auto var_value = value ? "1" : "0";
-            eval_formula = std::regex_replace(eval_formula, std::regex("\\b" + var + "\\b"), var_value);
+            std::regex var_regex("\\b" + var + "\\b");
+            eval_formula = std::regex_replace(eval_formula, var_regex, var_value);
         }
 
-        // Logischen Ausdruck auswerten (vereinfacht, nur für &, |, !)
-        std::stack<bool> stack;
-        for (char c : eval_formula) {
+        // Klammerauswertung
+        std::stack<char> operators;
+        std::stack<bool> operands;
+
+        auto apply_operator = [](char op, bool a, bool b) {
+            switch (op) {
+                case '&': return a && b;
+                case '|': return a || b;
+                default: throw std::runtime_error("Unbekannter Operator");
+            }
+        };
+
+        auto apply_not = [](bool a) {
+            return !a;
+        };
+
+        for (size_t i = 0; i < eval_formula.size(); ++i) {
+            char c = eval_formula[i];
+
             if (c == '1') {
-                stack.push(true);
+                operands.push(true);
             } else if (c == '0') {
-                stack.push(false);
-            } else if (c == '&') {
-                if (stack.size() < 2) throw std::runtime_error("Fehler: Ungültige Formel!");
-                auto b = stack.top(); stack.pop();
-                auto a = stack.top(); stack.pop();
-                stack.push(a && b);
-            } else if (c == '|') {
-                if (stack.size() < 2) throw std::runtime_error("Fehler: Ungültige Formel!");
-                auto b = stack.top(); stack.pop();
-                auto a = stack.top(); stack.pop();
-                stack.push(a || b);
+                operands.push(false);
             } else if (c == '!') {
-                if (stack.empty()) throw std::runtime_error("Fehler: Ungültige Formel!");
-                auto a = stack.top(); stack.pop();
-                stack.push(!a);
+                if (operands.empty()) throw std::runtime_error("Fehler: Ungültiger Ausdruck");
+                bool top = operands.top();
+                operands.pop();
+                operands.push(apply_not(top));
+            } else if (c == '&' || c == '|') {
+                operators.push(c);
+            } else if (c == ')') {
+                if (operators.empty()) throw std::runtime_error("Fehler: Ungültiger Ausdruck");
+                char op = operators.top();
+                operators.pop();
+                bool b = operands.top();
+                operands.pop();
+                bool a = operands.top();
+                operands.pop();
+                operands.push(apply_operator(op, a, b));
             }
         }
 
-        if (stack.size() != 1) {
-            throw std::runtime_error("Fehler bei der Auswertung der Formel.");
-        }
-        return stack.top();
+        return operands.top();
     }
 
-    // Hilfsfunktion zum Aufteilen des Strings
-    static std::vector<std::string> split(const std::string& text, char delimiter) {
+    void show_error(const std::string& message) {
+        Gtk::MessageDialog dialog(*this, "Fehler", false, Gtk::MessageType::ERROR, Gtk::ButtonsType::OK);
+        dialog.set_secondary_text(message);
+
+        // Replace dialog.run() with dialog.show() in GTK4
+        dialog.present();
+    }
+
+    std::vector<std::string> split(const std::string& str, char delimiter) {
         std::vector<std::string> tokens;
         std::string token;
-        std::istringstream token_stream(text);
-        while (std::getline(token_stream, token, delimiter)) {
-            if (!token.empty()) {
+        for (char c : str) {
+            if (c == delimiter) {
                 tokens.push_back(token);
+                token.clear();
+            } else {
+                token += c;
             }
         }
+        if (!token.empty()) tokens.push_back(token);
         return tokens;
     }
 };
 
-int main(int argc, char* argv[]) {
-    auto app = Gtk::Application::create("com.example.truth_table");
-    TruthTableApp window;
+class TruthTableApp : public Gtk::Application {
+protected:
+    void on_startup() override {
+        Gtk::Application::on_startup();
 
-    return app->make_window_and_run<TruthTableApp>(argc, argv);
+        // Create the window
+        window = new MainWindow();
+
+        // Set the window as the main window of the application
+        add_window(*window);
+    }
+
+    void on_activate() override {
+        window->present();
+    }
+
+private:
+    MainWindow* window;
+};
+
+int main(int argc, char* argv[]) {
+    // Create the application object
+    auto app = Gtk::Application::create("org.gtk.example");
+    auto truth_table_app = new TruthTableApp();
+
+    // Run the application with argc and argv
+    return truth_table_app->run(argc, argv);  // Exactly 2 arguments
 }
